@@ -1,65 +1,96 @@
 import os 
 import time
 import threading
-import shutil #Libreria para copiar mover, renombrar y eliminar archivos
+import shutil
 import logging
 
-#Confi de logging
+# configuracion de logging
 logging.basicConfig(
     filename='servidor_archivos/logs/demonio.log', 
     level=logging.INFO,
-    formart='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
-#Rutas de los directorios 
 
+# carpetas del sistema
 DIR_ENTRADA = 'servidor_archivos/entrada'
 DIR_PROCESADOS = 'servidor_archivos/procesados'
 DIR_LOGS = 'servidor_archivos/logs'
 
-#Implementacion de los semafotos para sincronizacion de acceso a archivos
-
+# candado para evitar problemas
 archivo_lock = threading.Lock()
 
-#Registro de op en el archivo de registro 
+# funcion para guardar lo que hace el programa
 def registrar_operacion(mensaje):
     with archivo_lock:
         with open(f"{DIR_LOGS}/registro.log", "a") as log_file:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             log_file.write(f"[{timestamp}] {mensaje}\n")
             logging.info(mensaje)
-#Procesar el arcivo
+            
+# funcion para mover archivos de entrada a procesados
 def procesar_archivo(archivo):
     try:
-        origen  = os.path.join(DIR_ENTRADA, archivo)
-        destino = os.path.joi(DIR_PROCESADOS, archivo)
+        origen = os.path.join(DIR_ENTRADA, archivo)
+        destino = os.path.join(DIR_PROCESADOS, archivo)
+        
         with archivo_lock:
-        # Verificar que el archivo aun existe (podria haber sido movido por otro thread)
+            # verifico si todavia existe
             if os.path.exists(origen):
-                shutil.copy2(origen,destino)
+                # copio y luego borro el original
+                shutil.copy2(origen, destino)
                 os.remove(origen)
                 mensaje = f"Archivo {archivo} procesado exitosamente"
                 registrar_operacion(mensaje)
                 print(mensaje)
-
             else:
                 logging.warning(f"El archivo {archivo} ya no existe en la carpeta de entrada")
     except Exception as e:
         error = f"Error al procesar el archivo {archivo}: {str(e)}"
         registrar_operacion(error)
-        logging.erro(error)
+        logging.error(error)
 
-#Funcion principal de demonio
-def monitorear_dicrectorio():
+# funcion principal que revisa cada 10 segundos
+def monitorear_directorio():
     print(f"Iniciando monitoreo del directorio {DIR_ENTRADA}...")
     registrar_operacion("Demonio de monitoreo iniciado")
 
-    #cREAR registro.log por si no existe
-
+    # creo el archivo de log si no existe
     if not os.path.exists(f"{DIR_LOGS}/registro.log"):
         with open(f"{DIR_LOGS}/registro.log", "w") as log_file:
             log_file.write("# Registro de operaciones del servidor de archivos\n")
+    
+    while True:
+        try:
+            # busco archivos nuevos
+            archivos = [f for f in os.listdir(DIR_ENTRADA) if os.path.isfile(os.path.join(DIR_ENTRADA, f))]
+            
+            # proceso cada archivo con un hilo separado
+            for archivo in archivos:
+                thread = threading.Thread(target=procesar_archivo, args=(archivo,))
+                thread.start()
 
-            while True:
-                try: 
-                    archivos  
+            # espero 10 segundos antes de revisar de nuevo
+            time.sleep(10)
+        except Exception as e:
+            error = f"Error durante el monitoreo: {str(e)}"
+            registrar_operacion(error)
+            logging.error(error)
+            time.sleep(10)
 
+if __name__ == "__main__":
+    try:
+        # creo los directorios si no existen
+        for directorio in [DIR_ENTRADA, DIR_PROCESADOS, DIR_LOGS]:
+            if not os.path.exists(directorio):
+                os.makedirs(directorio)
+                registrar_operacion(f"Directorio {directorio} creado")
+
+        # inicio el monitoreo
+        monitorear_directorio()
+    except KeyboardInterrupt:
+        registrar_operacion("Demonio de monitoreo detenido manualmente")
+        print("Monitoreo detenido manualmente")
+    except Exception as e:
+        error = f"Error fatal en el demonio: {str(e)}"
+        registrar_operacion(error)
+        logging.critical(error)
