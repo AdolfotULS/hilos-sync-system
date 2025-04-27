@@ -7,6 +7,7 @@ class ClienteArchivos:
         self.host = host
         self.port = port
         self.socket = None
+        self.buffer_size = 4096
 
     def conectar(self):
         """Establece conexión con el servidor"""
@@ -28,8 +29,8 @@ class ClienteArchivos:
     def enviar_comando(self, comando):
         """Envía un comando al servidor y recibe la respuesta"""
         try:
-            self.socket.sendall(comando.encode())
-            respuesta = self.socket.recv(4096).decode()
+            self.socket.sendall(comando.encode('utf-8'))
+            respuesta = self.socket.recv(self.buffer_size).decode('utf-8')
             return respuesta
         except Exception as e:
             print(f"Error en la comunicación: {e}")
@@ -43,7 +44,8 @@ class ClienteArchivos:
 
     def leer_archivo(self, nombre_archivo):
         """Lee el contenido de un archivo del servidor"""
-        respuesta = self.enviar_comando(f"LEER|{nombre_archivo}")
+        comando = f"LEER|{nombre_archivo}"
+        respuesta = self.enviar_comando(comando)
         print(f"\nContenido del archivo {nombre_archivo}:")
         print(respuesta)
 
@@ -57,18 +59,34 @@ class ClienteArchivos:
             with open(ruta_archivo, 'r') as f:
                 contenido = f.read()
                 nombre_archivo = os.path.basename(ruta_archivo)
-                # Implementar lógica de subida
-                print(f"Archivo {nombre_archivo} subido exitosamente")
+                comando = f"SUBIR|{nombre_archivo}|{contenido}"
+                respuesta = self.enviar_comando(comando)
+                print(respuesta)
         except Exception as e:
             print(f"Error al subir el archivo: {e}")
 
     def descargar_archivo(self, nombre_archivo):
         """Descarga un archivo del servidor"""
-        respuesta = self.enviar_comando(f"COPIAR|{nombre_archivo}")
-        if "no encontrado" not in respuesta:
-            print(f"Archivo {nombre_archivo} descargado exitosamente")
-        else:
+        comando = f"DESCARGAR|{nombre_archivo}"
+        respuesta = self.enviar_comando(comando)
+
+        if "Error" in respuesta:
             print(respuesta)
+            return
+
+        try:
+            # Guardar el archivo en el directorio actual
+            with open(nombre_archivo, 'w') as f:
+                f.write(respuesta)
+            print(f"Archivo {nombre_archivo} descargado exitosamente")
+        except Exception as e:
+            print(f"Error al guardar el archivo descargado: {e}")
+
+    def ver_logs(self):
+        """Solicita y muestra los logs del servidor"""
+        respuesta = self.enviar_comando("LOGS|")
+        print("\nRegistro de operaciones del servidor:")
+        print(respuesta)
 
 def mostrar_menu():
     """Muestra el menú de opciones disponibles"""
@@ -106,7 +124,7 @@ def main():
                 cliente.descargar_archivo(nombre_archivo)
 
             elif opcion == "5":
-                print("Visualización de logs no implementada aún")
+                cliente.ver_logs()
 
             elif opcion == "0":
                 break
