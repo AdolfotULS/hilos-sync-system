@@ -20,7 +20,6 @@ hilos-sync-system/
 ├── cliente.py            # Cliente interactivo para uso del usuario
 ├── demonio.py            # Proceso demonio para monitoreo del directorio de entrada
 ├── README.md             # Este archivo
-└── docs/                 # Documentación adicional
 ```
 
 ## Requisitos
