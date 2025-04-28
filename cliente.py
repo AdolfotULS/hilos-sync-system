@@ -11,7 +11,7 @@ class ClienteArchivos:
         self.buffer_size = 4096
 
     def conectar(self):
-        """Establece conexión con el servidor"""
+        """Establece conexion con el servidor"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.host, self.port))
@@ -22,19 +22,19 @@ class ClienteArchivos:
             return False
 
     def cerrar(self):
-        """Cierra la conexión con el servidor"""
+        """Cierra la conexion con el servidor"""
         if self.socket:
             self.socket.close()
-            print("Conexión cerrada")
+            print("Conexion cerrada")
 
     def enviar_comando(self, comando):
-        """Envía un comando al servidor y recibe la respuesta"""
+        """Envia un comando al servidor y recibe la respuesta"""
         try:
             self.socket.sendall(comando.encode('utf-8'))
             respuesta = self.socket.recv(self.buffer_size).decode('utf-8')
             return respuesta
         except Exception as e:
-            print(f"Error en la comunicación: {e}")
+            print(f"Error en la comunicacion: {e}")
             return None
 
     def listar_archivos(self):
@@ -76,7 +76,6 @@ class ClienteArchivos:
             return
 
         try:
-            # Guardar el archivo en el directorio actual
             with open(nombre_archivo, 'w') as f:
                 f.write(respuesta)
             print(f"Archivo {nombre_archivo} descargado exitosamente")
@@ -90,28 +89,28 @@ class ClienteArchivos:
         print(respuesta)
 
 def preguntar_host():
-        while True:
-            h = input("IP del servidor (o 'localhost'): ")
-            if h.lower() == 'localhost':
-                return '127.0.0.1'
-            try:
-                ipaddress.ip_address(h)
-                return h
-            except ValueError:
-                print("→ IP inválida, intente de nuevo.")
+    while True:
+        h = input("IP del servidor (o 'localhost'): ")
+        if h.lower() == 'localhost':
+            return '127.0.0.1'
+        try:
+            ipaddress.ip_address(h)
+            return h
+        except ValueError:
+            print("-> IP invalida, intente de nuevo.")
 
 def preguntar_port():
     while True:
         try:
             p = int(input("Puerto (1–65535): "))
             if 1 <= p <= 65535:
-                    return p
+                return p
         except ValueError:
             pass
-        print("→ Puerto inválido, ingrese un número entre 1 y 65535.")
+        print("-> Puerto invalido, ingrese un numero entre 1 y 65535.")
 
 def mostrar_menu():
-    """Muestra el menú de opciones disponibles"""
+    """Muestra el menu de opciones disponibles"""
     print("\n=== CLIENTE DE ARCHIVOS ===")
     print("1. Listar archivos")
     print("2. Leer archivo")
@@ -119,13 +118,13 @@ def mostrar_menu():
     print("4. Descargar archivo")
     print("5. Ver logs")
     print("0. Salir")
-    return input("Seleccione una opción: ")
+    return input("Seleccione una opcion: ")
 
 def main():
-    """Función principal del cliente"""
+    """Funcion principal del cliente"""
     host = preguntar_host()
     port = preguntar_port()
-    
+
     cliente = ClienteArchivos(host, port)
     if not cliente.conectar():
         return
@@ -156,10 +155,10 @@ def main():
                 break
 
             else:
-                print("Opción no válida")
+                print("Opcion no valida")
 
     except KeyboardInterrupt:
-        print("\nOperación interrumpida por el usuario")
+        print("\nOperacion interrumpida por el usuario")
     finally:
         cliente.cerrar()
 
