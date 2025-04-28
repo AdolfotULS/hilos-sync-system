@@ -6,13 +6,8 @@ import logging
 import sys
 import platform
 
-# Veo que sistema operativo es y pongo la carpeta donde corresponde
-if platform.system() == "Windows":
-    # En Windows uso la carpeta Documentos
-    BASE_DIR = os.path.join(os.path.expanduser("~"), "Documents", "servidor_archivos")
-else:
-    # En Linux o Mac uso la carpeta del usuario
-    BASE_DIR = os.path.expanduser("~/servidor_archivos")
+# Uso una sola ruta para todos los sistemas
+BASE_DIR = os.path.expanduser("~/servidor_archivos")
 
 # Creo nombres para las carpetas que voy a usar
 DIR_ENTRADA = os.path.join(BASE_DIR, 'entrada')
