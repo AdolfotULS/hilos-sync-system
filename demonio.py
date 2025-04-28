@@ -1,44 +1,58 @@
-import os 
+import os
 import time
 import threading
 import shutil
 import logging
+import sys
+import platform
 
-# configuracion de logging
+# Veo que sistema operativo es y pongo la carpeta donde corresponde
+if platform.system() == "Windows":
+    # En Windows uso la carpeta Documentos
+    BASE_DIR = os.path.join(os.path.expanduser("~"), "Documents", "servidor_archivos")
+else:
+    # En Linux o Mac uso la carpeta del usuario
+    BASE_DIR = os.path.expanduser("~/servidor_archivos")
+
+# Creo nombres para las carpetas que voy a usar
+DIR_ENTRADA = os.path.join(BASE_DIR, 'entrada')
+DIR_PROCESADOS = os.path.join(BASE_DIR, 'procesados')
+DIR_LOGS = os.path.join(BASE_DIR, 'logs')
+
+# Me aseguro que existan las carpetas
+for directorio in [DIR_ENTRADA, DIR_PROCESADOS, DIR_LOGS]:
+    if not os.path.exists(directorio):
+        os.makedirs(directorio)
+
+# Configuro el log para guardar errores
 logging.basicConfig(
-    filename='servidor_archivos/logs/demonio.log', 
+    filename=os.path.join(DIR_LOGS, 'demonio.log'),
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# carpetas del sistema
-DIR_ENTRADA = 'servidor_archivos/entrada'
-DIR_PROCESADOS = 'servidor_archivos/procesados'
-DIR_LOGS = 'servidor_archivos/logs'
-
-# candado para evitar problemas
+# Esto es para que no se mezclen los archivos
 archivo_lock = threading.Lock()
 
-# funcion para guardar lo que hace el programa
+# Esta funcion guarda mensajes en el log
 def registrar_operacion(mensaje):
     with archivo_lock:
-        with open(f"{DIR_LOGS}/registro.log", "a") as log_file:
+        log_path = os.path.join(DIR_LOGS, "registro.log")
+        with open(log_path, "a", encoding='utf-8') as log_file:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
             log_file.write(f"[{timestamp}] {mensaje}\n")
             logging.info(mensaje)
-            
-# funcion para mover archivos de entrada a procesados
+# Esta funcion copia archivos de entrada a procesados
 def procesar_archivo(archivo):
     try:
         origen = os.path.join(DIR_ENTRADA, archivo)
         destino = os.path.join(DIR_PROCESADOS, archivo)
-        
         with archivo_lock:
-            # verifico si todavia existe
+            # Primero veo si el archivo sigue ahi
             if os.path.exists(origen):
-                # verifico si ya existe un archivo con el mismo nombre en procesados
+                # Veo si ya hay uno igual en procesados
                 if os.path.exists(destino):
-                    # si ya existe, creo un nombre único agregando timestamp
+                    # Si ya hay uno igual, le pongo la fecha y hora al nombre
                     nombre_base, extension = os.path.splitext(archivo)
                     timestamp = time.strftime("%Y%m%d%H%M%S")
                     nuevo_nombre = f"{nombre_base}_{timestamp}{extension}"
@@ -46,8 +60,7 @@ def procesar_archivo(archivo):
                     mensaje = f"El archivo {archivo} ya existe en procesados, renombrando a {nuevo_nombre}"
                     registrar_operacion(mensaje)
                     print(mensaje)
-                
-                # copio y luego borro el original
+                # Copio el archivo y borro el original
                 shutil.copy2(origen, destino)
                 os.remove(origen)
                 mensaje = f"Archivo {archivo} procesado exitosamente"
@@ -60,27 +73,27 @@ def procesar_archivo(archivo):
         registrar_operacion(error)
         logging.error(error)
 
-# funcion principal que revisa cada 10 segundos
+# Esta es la funcion principal que revisa cada 10 segundos si hay archivos nuevos
 def monitorear_directorio():
     print(f"Iniciando monitoreo del directorio {DIR_ENTRADA}...")
-    registrar_operacion("Demonio de monitoreo iniciado")
+    registrar_operacion(f"Demonio de monitoreo iniciado en {platform.system()}")
+    print(f"Sistema operativo detectado: {platform.system()}")
 
-    # creo el archivo de log si no existe
-    if not os.path.exists(f"{DIR_LOGS}/registro.log"):
-        with open(f"{DIR_LOGS}/registro.log", "w") as log_file:
+    # Creo el archivo de registro si no existe
+    log_path = os.path.join(DIR_LOGS, "registro.log")
+    if not os.path.exists(log_path):
+        with open(log_path, "w", encoding='utf-8') as log_file:
             log_file.write("# Registro de operaciones del servidor de archivos\n")
-    
     while True:
         try:
-            # busco archivos nuevos
+            # Busco los archivos que hay en la carpeta entrada
             archivos = [f for f in os.listdir(DIR_ENTRADA) if os.path.isfile(os.path.join(DIR_ENTRADA, f))]
-            
-            # proceso cada archivo con un hilo separado
+            # Por cada archivo creo un hilo para que trabaje rapido
             for archivo in archivos:
                 thread = threading.Thread(target=procesar_archivo, args=(archivo,))
                 thread.start()
 
-            # espero 10 segundos antes de revisar de nuevo
+            # Espero 10 segundos para no estar revisando todo el tiempo
             time.sleep(10)
         except Exception as e:
             error = f"Error durante el monitoreo: {str(e)}"
@@ -90,13 +103,9 @@ def monitorear_directorio():
 
 if __name__ == "__main__":
     try:
-        # creo los directorios si no existen
-        for directorio in [DIR_ENTRADA, DIR_PROCESADOS, DIR_LOGS]:
-            if not os.path.exists(directorio):
-                os.makedirs(directorio)
-                registrar_operacion(f"Directorio {directorio} creado")
-
-        # inicio el monitoreo
+        print(f"Iniciando demonio en {BASE_DIR}")
+        print(f"Sistema operativo: {platform.system()}")
+        # Inicio el programa principal
         monitorear_directorio()
     except KeyboardInterrupt:
         registrar_operacion("Demonio de monitoreo detenido manualmente")
