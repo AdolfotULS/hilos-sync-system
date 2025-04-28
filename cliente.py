@@ -1,9 +1,10 @@
 import socket
 import os
 from pathlib import Path
+import ipaddress
 
 class ClienteArchivos:
-    def __init__(self, host='127.0.0.1', port=65432):
+    def __init__(self, host=None, port=None):
         self.host = host
         self.port = port
         self.socket = None
@@ -88,6 +89,27 @@ class ClienteArchivos:
         print("\nRegistro de operaciones del servidor:")
         print(respuesta)
 
+def preguntar_host():
+        while True:
+            h = input("IP del servidor (o 'localhost'): ")
+            if h.lower() == 'localhost':
+                return '127.0.0.1'
+            try:
+                ipaddress.ip_address(h)
+                return h
+            except ValueError:
+                print("→ IP inválida, intente de nuevo.")
+
+def preguntar_port():
+    while True:
+        try:
+            p = int(input("Puerto (1–65535): "))
+            if 1 <= p <= 65535:
+                    return p
+        except ValueError:
+            pass
+        print("→ Puerto inválido, ingrese un número entre 1 y 65535.")
+
 def mostrar_menu():
     """Muestra el menú de opciones disponibles"""
     print("\n=== CLIENTE DE ARCHIVOS ===")
@@ -100,7 +122,11 @@ def mostrar_menu():
     return input("Seleccione una opción: ")
 
 def main():
-    cliente = ClienteArchivos()
+    """Función principal del cliente"""
+    host = preguntar_host()
+    port = preguntar_port()
+    
+    cliente = ClienteArchivos(host, port)
     if not cliente.conectar():
         return
 
