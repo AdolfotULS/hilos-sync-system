@@ -22,7 +22,7 @@ class ClienteArchivos:
             print(f"Error al conectar: {e}")
             return False
 
-    def _reconectar(self, max_intentos=3, espera=5):
+    def _reconectar(self, max_intentos=5, espera=8):
         """Intenta reconectar hasta max_intentos veces"""
         for intento in range(1, max_intentos + 1):
             print(f"Reintentando conexion ({intento}/{max_intentos})...")
