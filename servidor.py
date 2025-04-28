@@ -7,9 +7,21 @@ import datetime
 import logging
 from pathlib import Path
 
+def obtener_ip_local():
+    """Obtiene la IP local del equipo"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))  # No envía datos, solo conecta para sacar la IP
+        ip_local = s.getsockname()[0]
+        s.close()
+        return ip_local
+    except Exception as e:
+        print(f"Error obteniendo IP local: {str(e)}")
+        return '127.0.0.1'  # Fallback
+
 # Configuracion global
-HOST = '127.0.0.1'
-PORT = 65432  
+HOST = obtener_ip_local()
+PORT = 5050  
 BUFFER_SIZE = 4096
 BASE_DIR = os.path.expanduser("~/servidor_archivos")
 ENTRADA_DIR = os.path.join(BASE_DIR, "entrada")
@@ -198,25 +210,28 @@ def manejar_comando_descargar(nombre_archivo):
 
 def manejar_comando_logs():
     """Envia el contenido del archivo de log"""
-    with log_mutex:
-        try:
-            # Asegurar que el archivo de log existe
-            if not os.path.exists(LOG_FILE):
-                return "El archivo de registro esta vacio."
-                
-            with open(LOG_FILE, 'r') as f:
+    try:
+        # Asegurar que el archivo de log existe
+        if not os.path.exists(LOG_FILE):
+            registrar_operacion("Cliente solicitó logs pero el archivo no existe")
+            return "El archivo de registro no existe."
+            
+        with log_mutex:
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
                 contenido = f.read()
-            
-            if not contenido:
-                return "El archivo de registro esta vacio."
-            
-            registrar_operacion("Logs solicitados por cliente")
-            return contenido
         
-        except Exception as e:
-            registrar_operacion(f"Error al leer logs: {str(e)}")
-            return f"Error al leer logs: {str(e)}"
-
+        if not contenido.strip():
+            registrar_operacion("Cliente solicitó logs pero el archivo está vacío")
+            return "El archivo de registro está vacío."
+        
+        registrar_operacion("Logs solicitados por cliente")
+        return contenido
+    
+    except Exception as e:
+        error_msg = f"Error al leer logs: {str(e)}"
+        registrar_operacion(error_msg)
+        return error_msg
+    
 def verificar_entorno():
     """Verifica y crea los directorios necesarios"""
     for directorio in [BASE_DIR, ENTRADA_DIR, PROCESADOS_DIR, LOGS_DIR]:
