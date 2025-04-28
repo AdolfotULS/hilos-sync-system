@@ -36,6 +36,17 @@ def procesar_archivo(archivo):
         with archivo_lock:
             # verifico si todavia existe
             if os.path.exists(origen):
+                # verifico si ya existe un archivo con el mismo nombre en procesados
+                if os.path.exists(destino):
+                    # si ya existe, creo un nombre único agregando timestamp
+                    nombre_base, extension = os.path.splitext(archivo)
+                    timestamp = time.strftime("%Y%m%d%H%M%S")
+                    nuevo_nombre = f"{nombre_base}_{timestamp}{extension}"
+                    destino = os.path.join(DIR_PROCESADOS, nuevo_nombre)
+                    mensaje = f"El archivo {archivo} ya existe en procesados, renombrando a {nuevo_nombre}"
+                    registrar_operacion(mensaje)
+                    print(mensaje)
+                
                 # copio y luego borro el original
                 shutil.copy2(origen, destino)
                 os.remove(origen)
