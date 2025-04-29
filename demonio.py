@@ -5,6 +5,7 @@ import shutil
 import logging
 import sys
 import platform
+import queue
 
 # Aca ponemos donde van a estar los archivos (en tu carpeta personal)
 BASE_DIR = os.path.expanduser("~/servidor_archivos")
@@ -29,6 +30,13 @@ logging.basicConfig(
 # Esto es pa k los archivos no se mezclen cuando varios procesos trabajan juntos
 archivo_lock = threading.Lock()
 
+# Cola para procesar archivos
+cola_archivos = queue.Queue()
+
+# Set para llevar un registro de archivos en procesamiento
+archivos_en_proceso = set()
+archivos_en_proceso_lock = threading.Lock()
+
 # Esta funcion escribe en el log lo k pasa
 def registrar_operacion(mensaje):
     with archivo_lock:
@@ -43,35 +51,66 @@ def procesar_archivo(archivo):
     try:
         origen = os.path.join(DIR_ENTRADA, archivo)
         destino = os.path.join(DIR_PROCESADOS, archivo)
+        
+        # Verificamos si el archivo existe antes de procesar
+        if not os.path.exists(origen):
+            mensaje = f"El archivo {archivo} ya no existe en la carpeta de entrada"
+            registrar_operacion(mensaje)
+            logging.warning(mensaje)
+            print(mensaje)
+            return
+            
+        # Vemos si ya hay un archivo con el mismo nombre en destino
+        if os.path.exists(destino):
+            # Si ya existe, le ponemos la fecha al nombre para k sea unico
+            nombre_base, extension = os.path.splitext(archivo)
+            timestamp = time.strftime("%Y%m%d%H%M%S")
+            nuevo_nombre = f"{nombre_base}_{timestamp}{extension}"
+            destino = os.path.join(DIR_PROCESADOS, nuevo_nombre)
+            mensaje = f"El archivo {archivo} ya existe en procesados, renombrando a {nuevo_nombre}"
+            registrar_operacion(mensaje)
+            print(mensaje)
+        
+        # Copiamos el archivo y borramos el orijinal
+        # Aqui usamos el lock solo para la operacion critica
         with archivo_lock:
-            # Primero miramos si el archivo todavia existe
-            if os.path.exists(origen):
-                # Vemos si ya hay un archivo con el mismo nombre
-                if os.path.exists(destino):
-                    # Si ya existe, le ponemos la fecha al nombre para k sea unico
-                    nombre_base, extension = os.path.splitext(archivo)
-                    timestamp = time.strftime("%Y%m%d%H%M%S")
-                    nuevo_nombre = f"{nombre_base}_{timestamp}{extension}"
-                    destino = os.path.join(DIR_PROCESADOS, nuevo_nombre)
-                    mensaje = f"El archivo {archivo} ya existe en procesados, renombrando a {nuevo_nombre}"
-                    registrar_operacion(mensaje)
-                    print(mensaje)
-                # Copiamos el archivo y borramos el orijinal
+            if os.path.exists(origen):  # Verificamos de nuevo dentro del lock
                 shutil.copy2(origen, destino)
                 os.remove(origen)
                 mensaje = f"Archivo {archivo} procesado exitosamente"
                 registrar_operacion(mensaje)
                 print(mensaje)
-            else:
-                mensaje = f"El archivo {archivo} ya no existe en la carpeta de entrada"
-                registrar_operacion(mensaje)
-                logging.warning(mensaje)
-                print(mensaje)
+        
     except Exception as e:
         error = f"Error al procesar el archivo {archivo}: {str(e)}"
         registrar_operacion(error)
         logging.error(error)
         print(f"ERROR: {error}")
+    finally:
+        # Removemos el archivo de la lista de archivos en proceso
+        with archivos_en_proceso_lock:
+            if archivo in archivos_en_proceso:
+                archivos_en_proceso.remove(archivo)
+
+# Funcion que consume la cola de archivos
+def worker_procesar_archivos():
+    while True:
+        try:
+            # Obtenemos un archivo de la cola (espera si esta vacia)
+            archivo = cola_archivos.get(block=True, timeout=10)
+            try:
+                procesar_archivo(archivo)
+            finally:
+                # Marcamos la tarea como completada
+                cola_archivos.task_done()
+        except queue.Empty:
+            # Si no hay archivos por 10 segundos, sigue esperando
+            continue
+        except Exception as e:
+            error = f"Error en worker de procesamiento: {str(e)}"
+            registrar_operacion(error)
+            logging.error(error)
+            print(f"ERROR EN WORKER: {error}")
 
 # Esta es la funcion principal k revisa cada 10 segundos si hay archivos
 def monitorear_directorio():
@@ -85,33 +124,35 @@ def monitorear_directorio():
         with open(log_path, "w", encoding='utf-8') as log_file:
             log_file.write("# Registro de operaciones del servidor de archivos\n")
 
-    # Aqui guardamos los trabajos k estan corriendo
-    hilos_activos = []
+    # Creamos los workers (hilos que procesan la cola)
+    num_workers = 3  # Podemos usar varios trabajadores
+    for _ in range(num_workers):
+        worker = threading.Thread(target=worker_procesar_archivos, daemon=True)
+        worker.start()
     
     # Este es el bucle principal k nunca termina
     while True:
         try:
-            # Kitamos los trabajos ya terminados
-            hilos_activos = [h for h in hilos_activos if h.is_alive()]
-            
             # Buscamos archivos nuevos en la carpeta
             archivos = [f for f in os.listdir(DIR_ENTRADA) if os.path.isfile(os.path.join(DIR_ENTRADA, f))]
             
-            # Si hay archivos los mostramos
-            if archivos:
-                mensaje = f"Se encontraron {len(archivos)} archivos para procesar: {', '.join(archivos)}"
+            # Filtramos para procesar solo archivos nuevos (que no esten ya en proceso)
+            with archivos_en_proceso_lock:
+                archivos_nuevos = [f for f in archivos if f not in archivos_en_proceso]
+                
+                # Si hay archivos nuevos los agregamos a la lista de en proceso
+                for archivo in archivos_nuevos:
+                    archivos_en_proceso.add(archivo)
+            
+            # Si hay archivos nuevos los mostramos
+            if archivos_nuevos:
+                mensaje = f"Se encontraron {len(archivos_nuevos)} archivos nuevos para procesar: {', '.join(archivos_nuevos)}"
                 print(mensaje)
                 registrar_operacion(mensaje)
-            
-            # Por cada archivo hacemos un trabajo
-            for archivo in archivos:
-                thread = threading.Thread(target=procesar_archivo, args=(archivo,))
-                thread.start()
-                hilos_activos.append(thread)
-            
-            # Esperamos a k los trabajos terminen
-            for hilo in hilos_activos:
-                hilo.join(timeout=5)  # esperamos max 5 segundos
+                
+                # Agregamos los archivos nuevos a la cola
+                for archivo in archivos_nuevos:
+                    cola_archivos.put(archivo)
             
             # Si no hay nada lo decimos
             if not archivos:
